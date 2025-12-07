@@ -1,4 +1,6 @@
+# ...
 from ursina import *
+from panda3d.core import CullFaceAttrib
 import random
 
 app = Ursina()
@@ -21,11 +23,9 @@ def sign(x):
 class Player(Entity):
     def __init__(self, position, team, role, control_manager, number):
         super().__init__(
-            model='cube',
-            color=color.blue if team == 0 else color.red,
-            scale=(0.8, 1.8, 0.8),
             position=position,
-            collider='box'
+            collider='box',
+            scale=(1, 1, 1) # Reset scale for container
         )
         self.team = team # 0 = Blue, 1 = Red
         self.role = role # 'gk', 'def', 'mid', 'att'
@@ -33,15 +33,53 @@ class Player(Entity):
         self.control_manager = control_manager
         self.number = number
         
-        # Visuals: Number on back/top
-        self.number_text = Text(parent=self, text=str(number), color=color.white, scale=4, y=0.6, z=-0.6, billboard=True)
+        # --- Visuals: Procedural Humanoid ---
+        team_color = color.blue if team == 0 else color.red
+        skin_color = color.rgb(255, 220, 177)
+        short_color = color.white
+
+        # 1. Torso (The "Shirt")
+        self.torso = Entity(parent=self, model='cube', color=team_color, scale=(0.5, 0.7, 0.3), y=0.1)
+        self.create_outline(self.torso)
+
+        # 2. Head
+        self.head = Entity(parent=self, model='cube', color=skin_color, scale=(0.3, 0.35, 0.3), y=0.7)
+        self.create_outline(self.head)
+
+        # 3. Arms (Sleeves + Skin)
+        # Left Arm
+        self.l_arm = Entity(parent=self, model='cube', color=team_color, scale=(0.15, 0.6, 0.2), position=(-0.38, 0.1, 0))
+        self.create_outline(self.l_arm)
+        # Right Arm
+        self.r_arm = Entity(parent=self, model='cube', color=team_color, scale=(0.15, 0.6, 0.2), position=(0.38, 0.1, 0))
+        self.create_outline(self.r_arm)
+
+        # 4. Legs (Shorts + Skin)
+        # Left Leg
+        self.l_leg = Entity(parent=self, model='cube', color=short_color, scale=(0.2, 0.7, 0.25), position=(-0.15, -0.65, 0))
+        self.create_outline(self.l_leg)
+        # Right Leg
+        self.r_leg = Entity(parent=self, model='cube', color=short_color, scale=(0.2, 0.7, 0.25), position=(0.15, -0.65, 0))
+        self.create_outline(self.r_leg)
+
+        # Number on Back
+        # Z is negative for back because of how camera/game is oriented? 
+        # Actually in Ursina +Z is usually forward. Let's check existing code.
+        # Existing code: Text(z=-0.6) logic suggests -Z is "back" or "camera side".
+        # We will attach text to Torso. z=-0.51 (slightly behind torso)
+        self.number_text = Text(parent=self.torso, text=str(number), color=color.white, scale=8, origin=(0,0), z=-0.55)
+        self.number_text.rotation_y = 180 # Face backwards 
 
         self.speed = 8
         if role == 'att': self.speed = 9
         if role == 'def': self.speed = 7
         
         # Cursor for active player
-        self.cursor = Entity(parent=self, model='quad', texture='circle_outlined', color=color.yellow, scale=(2,2), rotation_x=90, y=-0.9, enabled=False)
+        self.cursor = Entity(parent=self, model='quad', texture='circle_outlined', color=color.yellow, scale=(2,2), rotation_x=90, y=-1.1, enabled=False)
+
+    def create_outline(self, part):
+        outline = Entity(parent=part, model='cube', color=color.black, scale=1.1, double_sided=False)
+        outline.set_attrib(CullFaceAttrib.make(CullFaceAttrib.MCullCounterClockwise))
 
     def update(self):
         # Physics / Ground clamp
@@ -52,11 +90,17 @@ class Player(Entity):
             self.move_user()
             self.cursor.enabled = True
             # visual feedback
-            self.color = color.azure if self.team == 0 else color.orange
+            c = color.azure if self.team == 0 else color.orange
+            self.torso.color = c
+            self.l_arm.color = c
+            self.r_arm.color = c
         else:
             self.ai_logic()
             self.cursor.enabled = False
-            self.color = color.blue if self.team == 0 else color.red
+            c = color.blue if self.team == 0 else color.red
+            self.torso.color = c
+            self.l_arm.color = c
+            self.r_arm.color = c
 
     # ... move_user, kick_ball, ai_logic remain mostly same but let's ensure they are preserved ...
     def move_user(self):
@@ -128,6 +172,7 @@ class Ball(Entity):
             collider='sphere'
         )
         self.velocity = Vec3(0,0,0)
+        self.outline = Entity(parent=self, model='sphere', color=color.black, scale=1.1, double_sided=False)
 
     def update(self):
         # Physics
