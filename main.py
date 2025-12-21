@@ -663,6 +663,91 @@ class Ball(Entity):
                  self.velocity += push_dir * 5 * time.dt
                  self.position += push_dir * 2 * time.dt
 
+class Referee(Entity):
+    def __init__(self):
+        super().__init__(
+            position=(0, 0.9, -15), # Start slightly off-center
+            collider=None, # No physics collision
+            scale=(1, 1, 1)
+        )
+        
+        # --- Visuals: Referee Uniform (Black) ---
+        skin_color = color.rgb(255, 220, 177)
+        kit_color = color.black
+        
+        # 1. Torso
+        self.torso = Entity(parent=self, model='cube', color=kit_color, scale=(0.4, 0.7, 0.25), y=0.1)
+        
+        # 2. Head
+        self.head = Entity(parent=self, model='cube', color=skin_color, scale=(0.3, 0.35, 0.3), y=0.7)
+        
+        # 3. Arms
+        self.l_arm = Entity(parent=self, model='cube', color=kit_color, scale=(0.12, 0.6, 0.15), position=(-0.35, 0.1, 0))
+        self.r_arm = Entity(parent=self, model='cube', color=kit_color, scale=(0.12, 0.6, 0.15), position=(0.35, 0.1, 0))
+        
+        # 4. Legs
+        self.l_leg = Entity(parent=self, model='cube', color=color.black, scale=(0.18, 0.7, 0.2), position=(-0.12, -0.65, 0))
+        self.r_leg = Entity(parent=self, model='cube', color=color.black, scale=(0.18, 0.7, 0.2), position=(0.12, -0.65, 0))
+
+        # Movement props
+        self.speed = 8.0
+        self.velocity = Vec3(0,0,0)
+        self.run_cycle = 0
+
+    def update(self):
+        # Follow the ball but keep reasonable distance
+        # Ideally, stay "behind" the play or to the side, not in the scrum
+        
+        # Target: Position near ball but not ON it
+        # Try to stay 10 units away, preferably on the side (Z axis)
+        
+        # Vector from ball to referee
+        vec_to_me = self.position - ball.position
+        dist = vec_to_me.length()
+        
+        target_pos = ball.position
+        
+        # If too close, back away
+        if dist < 8:
+            # Move away from ball
+            move_dir = vec_to_me.normalized()
+            if move_dir.length() < 0.1: move_dir = Vec3(0,0,1)
+            target_pos = ball.position + move_dir * 10
+        elif dist > 15:
+            # Move closer
+             target_pos = ball.position + vec_to_me.normalized() * 12
+        else:
+            # Happy zone, maybe drift towards side?
+            pass
+
+        # Smooth movement
+        dist_to_target = distance_xz(self.position, target_pos)
+        
+        if dist_to_target > 1.0:
+            dir_to_target = (target_pos - self.position).normalized()
+            self.velocity = lerp(self.velocity, dir_to_target * self.speed, time.dt * 2)
+            
+            # Look at ball
+            look_target = ball.position
+            look_target.y = self.y
+            self.look_at(look_target)
+            
+            # Animation
+            self.run_cycle += time.dt * self.velocity.length() * 2
+            self.l_leg.rotation_x = math.sin(self.run_cycle) * 30
+            self.r_leg.rotation_x = math.sin(self.run_cycle + math.pi) * 30
+            self.l_arm.rotation_x = math.sin(self.run_cycle + math.pi) * 30
+            self.r_arm.rotation_x = math.sin(self.run_cycle) * 30
+        else:
+            self.velocity = Vec3(0,0,0)
+            self.l_leg.rotation_x = lerp(self.l_leg.rotation_x, 0, time.dt * 5)
+            self.r_leg.rotation_x = lerp(self.r_leg.rotation_x, 0, time.dt * 5)
+            self.l_arm.rotation_x = lerp(self.l_arm.rotation_x, 0, time.dt * 5)
+            self.r_arm.rotation_x = lerp(self.r_arm.rotation_x, 0, time.dt * 5)
+
+        self.position += self.velocity * time.dt
+        self.y = 0.9 # Keep on ground
+
 class GameManager(Entity):
     def __init__(self):
         super().__init__()
@@ -673,6 +758,8 @@ class GameManager(Entity):
         self.team_1_players = []
         
         self.match_state = 'kickoff' # 'kickoff', 'playing'
+        
+        self.referee = Referee()
 
 
     def update(self):
