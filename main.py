@@ -244,8 +244,13 @@ class Player(Entity):
             else:
                 self.velocity = Vec3(0,0,0) # Stop on collision
 
+        # Kick Inputs
         if held_keys['space']:
-            self.kick_ball()
+            self.kick_ball(mode='shoot')
+        elif held_keys['f']:
+             self.kick_ball(mode='pass')
+        elif held_keys['g']:
+             self.kick_ball(mode='cross')
 
     def ai_logic(self):
         dist_to_ball = distance_xz(self.position, ball.position)
@@ -423,6 +428,25 @@ class Player(Entity):
         # If we couldn't pass even when blocked, we might just lose the ball or try to force it.
         pass 
 
+    def get_closest_teammate(self):
+        """Finds the best teammate to pass/cross to based on distance and direction."""
+        teammates = self.control_manager.team_0_players if self.team == 0 else self.control_manager.team_1_players
+        best_target = None
+        min_dist = 999
+        
+        # Simple closest logic for user feel, or maybe directional?
+        # Let's use directional if input is pressed, otherwise closest.
+        # For now, just closest teammate that isn't me.
+        
+        for mate in teammates:
+            if mate == self: continue
+            d = distance_xz(self.position, mate.position)
+            if d < min_dist:
+                min_dist = d
+                best_target = mate
+                
+        return best_target 
+
     def get_best_pass_target(self):
         best_target = None
         best_score = -999
@@ -492,15 +516,39 @@ class Player(Entity):
              self.anim_timer = 0
              
         elif mode == 'pass':
+             # User Pass: Auto-target closest, or directional?
+             # Let's try auto-targeting closest teammate for now to make it playable
+             if not target_entity and self.control_manager.active_player == self:
+                 target_entity = self.get_closest_teammate()
+
              if target_entity:
                  direction = (target_entity.position - self.position).normalized()
-                 power = 25 # Slower than shot
-                 lift = 2
+                 power = 25 # Fast pass
+                 lift = 0 # Ground pass
              else:
                  direction = self.forward
-                 power = 15
-                 lift = 2
+                 power = 20
+                 lift = 0
+             
              Audio('shoot', pitch=1.5, loop=False, autoplay=True) # Higher pitch for pass
+             self.anim_state = 'shoot'
+             self.anim_timer = 0
+             
+        elif mode == 'cross':
+             # Cross: target teammate but with height
+             if not target_entity and self.control_manager.active_player == self:
+                 target_entity = self.get_closest_teammate()
+                 
+             if target_entity:
+                 direction = (target_entity.position - self.position).normalized()
+                 power = 30 
+                 lift = 12 # High arc
+             else:
+                 direction = self.forward
+                 power = 30
+                 lift = 10
+                 
+             Audio('shoot', pitch=1.0, loop=False, autoplay=True)
              self.anim_state = 'shoot'
              self.anim_timer = 0
 
@@ -715,7 +763,8 @@ camera.position = (0, 50, -75)
 camera.rotation_x = 45
 
 # UI
-msg = Text(text='WASD to Move, SPACE to Kick, TAB to Switch Player', y=0.45, origin=(0,0))
+
+msg = Text(text='WASD to Move, SPACE to Shoot, F to Pass, G to Cross, TAB to Switch Player', y=0.45, origin=(0,0))
 
 def update():
     # Camera Smooth Follow
