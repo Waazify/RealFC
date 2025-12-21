@@ -216,6 +216,19 @@ class Player(Entity):
     def move_user(self):
         input_vec = Vec3(0,0,0)
         
+    def move_user(self):
+        input_vec = Vec3(0,0,0)
+        
+        # KICKOFF STATE: Lock movement
+        if self.control_manager.match_state == 'kickoff':
+            self.img_idle() # Force idle anim
+            # Only allow passing
+            if held_keys['space']: self.kick_ball(mode='shoot') # Should we allow shoot immediately? Maybe not.
+            elif held_keys['f']:
+                self.kick_ball(mode='pass')
+                
+            return
+
         if held_keys['w'] or held_keys['up arrow']: input_vec.z += 1
         if held_keys['s'] or held_keys['down arrow']: input_vec.z -= 1
         if held_keys['a'] or held_keys['left arrow']: input_vec.x -= 1
@@ -251,8 +264,17 @@ class Player(Entity):
              self.kick_ball(mode='pass')
         elif held_keys['g']:
              self.kick_ball(mode='cross')
+    
+    def img_idle(self):
+        self.velocity = Vec3(0,0,0)
+        self.anim_state = 'idle'
 
     def ai_logic(self):
+        # KICKOFF STATE: Freeze AI
+        if self.control_manager.match_state == 'kickoff':
+            self.img_idle()
+            return
+
         dist_to_ball = distance_xz(self.position, ball.position)
         target = self.base_position
         
@@ -534,6 +556,14 @@ class Player(Entity):
              self.anim_state = 'shoot'
              self.anim_timer = 0
              
+             Audio('shoot', pitch=1.5, loop=False, autoplay=True) # Higher pitch for pass
+             self.anim_state = 'shoot'
+             self.anim_timer = 0
+             
+             self.anim_timer = 0
+             
+             # If Kickoff, unlock game (Moved to end of function to cover all kicks)
+             
         elif mode == 'cross':
              # Cross: target teammate but with height
              if not target_entity and self.control_manager.active_player == self:
@@ -569,6 +599,14 @@ class Player(Entity):
              direction = self.forward
              power = 5
              lift = 0
+
+             lift = 0
+
+        # Unlock Kickoff State
+        if self.control_manager.match_state == 'kickoff':
+             if mode == 'pass':
+                 print(f"Kickoff -> Playing detected in kick_ball (PASS). Manager ID: {id(self.control_manager)}")
+                 self.control_manager.match_state = 'playing'
 
         ball.velocity = direction * power 
         ball.velocity.y = lift
@@ -628,14 +666,27 @@ class Ball(Entity):
 class GameManager(Entity):
     def __init__(self):
         super().__init__()
+        print(f"GameManager Initialized. ID: {id(self)}")
         self.players = []
         self.active_player = None
         self.team_0_players = []
         self.team_1_players = []
+        
+        self.match_state = 'kickoff' # 'kickoff', 'playing'
+
 
     def update(self):
+        # State Management: Unlock only on pass (handled in Player.kick_ball)
+        pass
+
         # Determine closest player to ball for each team (Tactical AI)
         if not self.team_0_players or not self.team_1_players: return
+
+        # Team 0
+        self.closest_to_ball_0 = min(self.team_0_players, key=lambda p: distance_xz(p.position, ball.position))
+        # Remove old state init here, it is in reset_positions/init
+        # self.state = 'kickoff' 
+        # self.kickoff_team = 0 
 
         # Team 0
         self.closest_to_ball_0 = min(self.team_0_players, key=lambda p: distance_xz(p.position, ball.position))
@@ -702,6 +753,83 @@ class GameManager(Entity):
         # Let's use cleaner alignment.
         self.p1_bar = Text(text="Real Madrid: ", position=(-0.5 * window.aspect_ratio + 0.1, -0.45), origin=(-0.5, 0), scale=1.5, color=color.white)
         self.p2_bar = Text(text="Barcelona: ", position=(0.5 * window.aspect_ratio - 0.6, -0.45), origin=(-0.5, 0), scale=1.5, color=color.white)
+        
+        self.reset_positions(0)
+
+    def reset_positions(self, team_index):
+        print(f"Reset Positions Called. Manager ID: {id(self)}")
+        self.match_state = 'kickoff'
+        self.kickoff_team = team_index
+        
+        # Reset Ball
+        ball.position = Vec3(0, 0.5, 0)
+        ball.velocity = Vec3(0, 0, 0)
+
+        # Team 0 (Left Side, -X)
+        t0_players = self.team_0_players
+        # Team 1 (Right Side, +X)
+        t1_players = self.team_1_players
+        
+        if team_index == 0:
+            # TEAM 0 KICK OFF
+            # 1. Striker (Active) at center
+            t0_players[9].position = Vec3(-0.5, 0.9, 0) # Ronaldo
+            self.active_player = t0_players[9]
+            
+            # 2. Teammate (Midfielder) close by for pass
+            t0_players[6].position = Vec3(-2, 0.9, 2)   # Messi (CAM)
+            
+            # 3. Rest of team 0 in own half
+            # GK
+            t0_players[0].position = Vec3(-60, 0.9, 0)
+            # Defenders
+            t0_players[1].position = Vec3(-45, 0.9, -20)
+            t0_players[2].position = Vec3(-42, 0.9, -7)
+            t0_players[3].position = Vec3(-42, 0.9, 7)
+            t0_players[4].position = Vec3(-45, 0.9, 20)
+            # Mids (excluding messi)
+            t0_players[5].position = Vec3(-25, 0.9, -12)
+            t0_players[7].position = Vec3(-25, 0.9, 12)
+            # Att (excluding ronaldo)
+            t0_players[8].position = Vec3(-10, 0.9, -20)
+            t0_players[10].position = Vec3(-10, 0.9, 20)      
+
+            # TEAM 1 (Defending) - Safely in own half
+            for p in t1_players:
+                 # Map their original "formation" positions but ensure X > 10
+                 # Simple shift: if they were too forward, pull back
+                 p.position = p.base_position
+                 if p.position.x < 10: p.position.x = 10 + random.uniform(0, 5)
+
+        else:
+            # TEAM 1 KICK OFF
+            # 1. Striker at center
+            t1_players[9].position = Vec3(0.5, 0.9, 0)
+            self.active_player = t1_players[9]
+            
+            # 2. Teammate close by
+            t1_players[6].position = Vec3(2, 0.9, 2)
+
+            # 3. Rest of team 1
+            # GK
+            t1_players[0].position = Vec3(60, 0.9, 0)
+            # Defs
+            t1_players[1].position = Vec3(45, 0.9, -15)
+            t1_players[2].position = Vec3(45, 0.9, 15)
+            t1_players[3].position = Vec3(40, 0.9, -5)
+            t1_players[4].position = Vec3(40, 0.9, 5)
+            # Mids
+            t1_players[5].position = Vec3(20, 0.9, -10)
+            t1_players[7].position = Vec3(15, 0.9, 0)
+            # Atts
+            t1_players[8].position = Vec3(5, 0.9, -15)
+            t1_players[10].position = Vec3(2, 0.9, 0) # Another att
+
+            # TEAM 0 (Defending)
+            for p in t0_players:
+                 p.position = p.base_position
+                 if p.position.x > -10: p.position.x = -10 - random.uniform(0, 5)
+
 
 
     def create_player(self, pos_2d, team, role, number, name):
