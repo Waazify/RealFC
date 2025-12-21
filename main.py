@@ -679,6 +679,13 @@ class GameManager(Entity):
         # State Management: Unlock only on pass (handled in Player.kick_ball)
         pass
 
+        # Auto-switch to player with ball (Team 0)
+        # If closest player is close enough to be considered "getting the ball"
+        if self.closest_to_ball_0 and self.closest_to_ball_0 != self.active_player:
+            dist = distance_xz(self.closest_to_ball_0.position, ball.position)
+            if dist < 5.0: # Auto-switch threshold
+                self.active_player = self.closest_to_ball_0
+
         # Determine closest player to ball for each team (Tactical AI)
         if not self.team_0_players or not self.team_1_players: return
 
