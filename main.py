@@ -725,15 +725,24 @@ class GameManager(Entity):
 
 # --- Scene Setup ---
 # Ground: Bright Green, Horizontal Orientation
-ground = Entity(model='plane', scale=(FIELD_WIDTH, 1, FIELD_DEPTH), color=color.rgb(0, 180, 0), collider='box')
+# Ground: Dark Green Base
+ground = Entity(model='plane', scale=(FIELD_WIDTH, 1, FIELD_DEPTH), color=color.rgb(0, 150, 0), collider='box')
+
+# Pitch Pattern (Alternating Stripes)
+stripe_width = 8
+for i in range(int(-FIELD_WIDTH/2), int(FIELD_WIDTH/2), stripe_width * 2):
+    Entity(parent=ground, model='quad', scale=(stripe_width/FIELD_WIDTH, 1), x=(i + stripe_width/2)/FIELD_WIDTH, 
+           color=color.rgba(0, 255, 0, 20), y=0.001, rotation_x=90) # Translucent overlay
+
+# Center Spot
+Entity(parent=ground, model='circle', scale=(0.015, 0.02), color=color.white, y=0.002, rotation_x=90) 
+
 
 # Lines
 # Center Line (Thinner, Z-axis)
 Entity(parent=ground, model='quad', scale=(0.005, 1), z=0, color=color.white, y=0.01, rotation_x=90) 
 # Center Circle
 Entity(parent=ground, model='circle', scale=(0.15, 1, 0.25), color=color.white, y=0.01, rotation_x=90, alpha=0.5) 
-# Note: Scale on plane parent is (120, 80). 
-# Circle scale (0.15, 0.25) -> (120*0.15=18, 80*0.25=20). roughly circle.
 
 # Touch lines (Top/Bottom Z)
 Entity(parent=ground, model='quad', scale=(1, 0.01), z=0.49, color=color.white, y=0.01, rotation_x=90) 
